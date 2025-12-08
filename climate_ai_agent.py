@@ -211,7 +211,15 @@ def run_ai_climate_agent(
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(plot_path, dpi=150)
+    #plt.savefig(plot_path, dpi=150)
+    os.makedirs("agent_outputs", exist_ok=True)
+
+    plt.figure(figsize=(10, 5))
+    # ... your plotting code ...
+    plt.tight_layout()
+
+    # Save a fixed-name PNG for the dashboard
+    plt.savefig("agent_outputs/latest_forecast.png", dpi=150)
     plt.close()
 
     # 9. Update state
