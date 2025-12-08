@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Global Temperature Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0b1020;
+      --card: #151a2c;
+      --accent: #ffb347;
+      --accent2: #4fd1c5;
+      --text: #f7fafc;
+      --muted: #a0aec0;
+    }
+    * {
+      box-sizing: border-box;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #1a2540, #050814);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+    .page {
+      max-width: 1100px;
+      width: 100%;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h1 span.globe {
+      font-size: 1.6rem;
+    }
+    .subtitle {
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr);
+      gap: 20px;
+    }
+    .card {
+      background: linear-gradient(135deg, #151a2c, #111625);
+      border-radius: 16px;
+      padding: 16px 18px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+      border: 1px solid rgba(255,255,255,0.03);
+    }
+    .card h2 {
+      font-size: 1.1rem;
+      margin: 0 0 8px;
+    }
+    .plot {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: #0b1020;
+      display: block;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .stat {
+      background: #0b1020;
+      border-radius: 12px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .stat-value {
+      font-size: 1.2rem;
+      font-weight: 600;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(79, 209, 197, 0.12);
+      color: var(--accent2);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 6px;
+    }
+    .footer {
+      margin-top: 18px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .footer a {
+      color: var(--accent2);
+      text-decoration: none;
+    }
+    .footer a:hover {
+      text-decoration: underline;
+    }
+    @media (max-width: 850px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      h1 {
+        font-size: 1.7rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1><span class="globe">🌍</span> Global Temperature Dashboard</h1>
+    <div class="subtitle">
+      Updated automatically from OWID monthly temperature anomalies using a Python agent.
+    </div>
+
+    <div class="grid">
+      <!-- Left: Plot -->
+      <div class="card">
+        <h2>Historical Trend & Forecast</h2>
+        <div class="badge" id="last-updated-badge">Loading…</div>
+        <img
+          src="agent_outputs/latest_forecast.png"
+          alt="Latest global temperature anomaly forecast"
+          class="plot"
+          onerror="this.style.display='none';"
+        />
+        <div class="footer">
+          If the chart is blank, wait for the next workflow run or check that
+          <code>agent_outputs/latest_forecast.png</code> is committed by the agent.
+        </div>
+      </div>
+
+      <!-- Right: Key numbers -->
+      <div class="card">
+        <h2>Key Numbers</h2>
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="stat-label">Latest observed month</div>
+            <div class="stat-value" id="latest-date">–</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Latest anomaly (vs 1991–2020)</div>
+            <div class="stat-value" id="latest-anom">–</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Trend</div>
+            <div class="stat-value" id="trend-decades">–</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Forecast year</div>
+            <div class="stat-value" id="target-year">–</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Predicted anomaly in that year</div>
+            <div class="stat-value" id="target-anom">–</div>
+          </div>
+        </div>
+        <div class="footer" id="generated-at-note">
+          Loading summary from <code>agent_outputs/summary.json</code>…
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    async function loadSummary() {
+      try {
+        const resp = await fetch('agent_outputs/summary.json', { cache: 'no-store' });
+        if (!resp.ok) {
+          throw new Error('HTTP ' + resp.status);
+        }
+        const data = await resp.json();
+
+        document.getElementById('latest-date').textContent =
+          data.latest_observed_date || '–';
+
+        if (data.latest_observed_anomaly !== undefined) {
+          document.getElementById('latest-anom').textContent =
+            data.latest_observed_anomaly.toFixed
+              ? data.latest_observed_anomaly.toFixed(2) + ' °C'
+              : data.latest_observed_anomaly + ' °C';
+        }
+
+        if (data.slope_per_decade !== undefined) {
+          document.getElementById('trend-decades').textContent =
+            data.slope_per_decade.toFixed
+              ? data.slope_per_decade.toFixed(2) + ' °C / decade'
+              : data.slope_per_decade + ' °C / decade';
+        }
+
+        document.getElementById('target-year').textContent =
+          data.target_year || '–';
+
+        if (data.target_year_prediction !== undefined) {
+          document.getElementById('target-anom').textContent =
+            data.target_year_prediction.toFixed
+              ? data.target_year_prediction.toFixed(2) + ' °C'
+              : data.target_year_prediction + ' °C';
+        }
+
+        const badge = document.getElementById('last-updated-badge');
+        badge.textContent = data.generated_at_utc
+          ? 'Updated ' + data.generated_at_utc
+          : 'Updated';
+
+        const note = document.getElementById('generated-at-note');
+        note.textContent = 'Summary generated at: ' + (data.generated_at_utc || 'unknown');
+      } catch (err) {
+        console.error('Error loading summary.json:', err);
+        document.getElementById('generated-at-note').textContent =
+          'Could not load summary.json. Has the agent run and committed outputs yet?';
+        document.getElementById('last-updated-badge').textContent = 'No data';
+      }
+    }
+
+    loadSummary();
+  </script>
+</body>
+</html>
