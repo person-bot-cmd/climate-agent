@@ -1,4 +1,3 @@
-
 """
 climate_ai_agent.py
 
@@ -14,12 +13,10 @@ Behavior:
     - Fits a linear trend vs fractional year
     - Forecasts next few years
     - Saves a plot, numeric summary, explanatory text
+    - Writes summary.json for the dashboard
     - Updates the state file
 - If no new data:
     - Prints a message and exits quickly
-
-Hook:
-- generate_explanation() is where you plug an LLM (ChatGPT, Gemini, etc.)
 """
 
 import os
@@ -38,7 +35,8 @@ OUTPUT_DIR = "agent_outputs"
 STATE_FILE = "agent_state.json"   # remembers last processed date
 
 
-def load_state(state_file=STATE_FILE):
+# --------------- STATE HELPERS ---------------
+def load_state(state_file: str = STATE_FILE) -> dict:
     """Load previous agent state (last processed date)."""
     if not os.path.exists(state_file):
         return {}
@@ -46,12 +44,13 @@ def load_state(state_file=STATE_FILE):
         return json.load(f)
 
 
-def save_state(state, state_file=STATE_FILE):
+def save_state(state: dict, state_file: str = STATE_FILE) -> None:
     """Save agent state to disk."""
     with open(state_file, "w") as f:
         json.dump(state, f)
 
 
+# --------------- EXPLANATION HOOK ---------------
 def generate_explanation(numeric_summary: str, mode: str = "teacher") -> str:
     """
     Placeholder for AI explanation.
@@ -59,11 +58,6 @@ def generate_explanation(numeric_summary: str, mode: str = "teacher") -> str:
     This is where you plug in an LLM (ChatGPT, Gemini, etc.).
     For now it returns a simple, human-written template so the code runs
     without needing an API key.
-
-    To use an LLM, you might:
-    - Send `numeric_summary` plus instructions to the model
-    - Get back a richer explanation
-    - Return that text here
     """
     if mode == "student":
         return (
@@ -88,6 +82,7 @@ def generate_explanation(numeric_summary: str, mode: str = "teacher") -> str:
         )
 
 
+# --------------- MAIN AGENT FUNCTION ---------------
 def run_ai_climate_agent(
     forecast_years: int = FORECAST_YEARS,
     output_dir: str = OUTPUT_DIR,
@@ -155,13 +150,14 @@ def run_ai_climate_agent(
     slope_per_year = model.coef_[0]
     slope_per_decade = slope_per_year * 10
     intercept = model.intercept_
+    print(f"Fitted linear model: anomaly ≈ {intercept:.3f} + {slope_per_year:.5f} * t_year")
 
     # 5. Build forecast
     last_t = world["t_year"].max()
     last_dt = world["date"].max()
 
     months = forecast_years * 12
-    step = 1 / 12
+    step = 1.0 / 12.0
 
     future_t_year = last_t + step * np.arange(1, months + 1)
     X_future = future_t_year.reshape(-1, 1)
@@ -170,16 +166,18 @@ def run_ai_climate_agent(
     future_dates = pd.date_range(
         start=last_dt + pd.offsets.MonthBegin(1),
         periods=months,
-        freq="MS"
+        freq="MS",
     )
 
     # 6. Build numeric summary text
     latest_row = world.iloc[-1]
     latest_anom = latest_row[anom_col]
     target_year = last_dt.year + forecast_years
+
     # pick forecast near mid target_year
     idx_target = (np.abs(future_t_year - (target_year + 0.5))).argmin()
     target_anom = y_future_pred[idx_target]
+    target_year_date = future_dates[idx_target].date()
 
     numeric_summary = (
         f"Numeric climate summary (OWID, baseline 1991–2020)\n"
@@ -192,17 +190,42 @@ def run_ai_climate_agent(
         f"{target_anom:.2f} °C above 1991–2020 average.\n"
     )
 
+    # 6b. Save JSON summary for the dashboard
+    summary = {
+        "latest_observed_date": str(latest_date),
+        "latest_observed_anomaly": float(round(latest_anom, 3)),
+        "slope_per_decade": float(round(slope_per_decade, 3)),
+        "slope_per_year": float(round(slope_per_year, 4)),
+        "target_year": int(target_year),
+        "target_year_date": str(target_year_date),
+        "target_year_prediction": float(round(target_anom, 3)),
+        "generated_at_utc": datetime.utcnow().isoformat() + "Z",
+    }
+
+    summary_path = os.path.join(output_dir, "summary.json")
+    with open(summary_path, "w") as f:
+        json.dump(summary, f, indent=2)
+    print(f"Saved dashboard summary → {summary_path}")
+
     # 7. Generate human explanation (AI hook)
     explanation = generate_explanation(numeric_summary, mode="teacher")
 
     # 8. Plot and save
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     plot_path = os.path.join(output_dir, f"ai_agent_forecast_{timestamp}.png")
+    latest_plot_path = os.path.join(output_dir, "latest_forecast.png")
+
+    os.makedirs(output_dir, exist_ok=True)
 
     plt.figure(figsize=(10, 5))
     plt.plot(world["date"], world[anom_col], label="Historical anomaly")
     plt.plot(world["date"], model.predict(X), "--", label="Linear trend")
-    plt.plot(future_dates, y_future_pred, ":", label=f"Forecast next {forecast_years} years")
+    plt.plot(
+        future_dates,
+        y_future_pred,
+        ":",
+        label=f"Forecast next {forecast_years} years",
+    )
     plt.axhline(0, linewidth=0.8)
 
     plt.xlabel("Year")
@@ -211,28 +234,25 @@ def run_ai_climate_agent(
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    #plt.savefig(plot_path, dpi=150)
-    os.makedirs("agent_outputs", exist_ok=True)
 
-    plt.figure(figsize=(10, 5))
-    # ... your plotting code ...
-    plt.tight_layout()
-
-    # Save a fixed-name PNG for the dashboard
-    plt.savefig("agent_outputs/latest_forecast.png", dpi=150)
+    # Save both a timestamped version (history) and a fixed-name dashboard version
+    plt.savefig(plot_path, dpi=150)
+    plt.savefig(latest_plot_path, dpi=150)
     plt.close()
+
+    print(f"Saved history plot → {plot_path}")
+    print(f"Saved dashboard plot → {latest_plot_path}")
 
     # 9. Update state
     state["last_processed_date"] = latest_date.isoformat()
     save_state(state, state_file)
+    print(f"State updated with last_processed_date = {latest_date}")
 
     # 10. Print summary to console
     print("\n=== NUMERIC SUMMARY ===")
     print(numeric_summary)
     print("\n=== EXPLANATION (AI HOOK) ===")
     print(explanation)
-    print(f"\nSaved plot → {plot_path}")
-    print(f"State updated with last_processed_date = {latest_date}")
 
     return {
         "status": "updated",
