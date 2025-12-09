@@ -1,0 +1,10 @@
+{
+  "latest_observed_date": "2025-10-15",
+  "latest_observed_anomaly": 0.695,
+  "slope_per_decade": 0.142,
+  "slope_per_year": 0.0142,
+  "target_year": 2030,
+  "target_year_date": "2030-06-01",
+  "target_year_prediction": 0.356,
+  "generated_at_utc": "2025-12-09T18:13:01.246487Z"
+}
