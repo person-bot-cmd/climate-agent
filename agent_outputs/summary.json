@@ -1,10 +1,10 @@
 {
-  "latest_observed_date": "2025-12-15",
-  "latest_observed_anomaly": 0.486,
+  "latest_observed_date": "2026-01-15",
+  "latest_observed_anomaly": 0.511,
   "slope_per_decade": 0.142,
   "slope_per_year": 0.0142,
-  "target_year": 2030,
-  "target_year_date": "2030-07-01",
-  "target_year_prediction": 0.36,
-  "generated_at_utc": "2026-01-07T06:28:39.834437Z"
+  "target_year": 2031,
+  "target_year_date": "2031-01-01",
+  "target_year_prediction": 0.368,
+  "generated_at_utc": "2026-02-18T06:57:04.360902Z"
 }
